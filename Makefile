@@ -7,7 +7,7 @@ all:
 	ln -s x509lint/checks.h
 	ln -s x509lint/messages.c
 	ln -s x509lint/messages.h
-	go install
+	go build
 
 clean:
 	rm -rf x509lint
