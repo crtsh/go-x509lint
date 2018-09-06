@@ -25,7 +25,6 @@ import (
 /*
 #cgo LDFLAGS: -lcrypto
 #include <stdlib.h>
-#include <string.h>
 #include "messages.h"
 #include "checks.h"
 */
