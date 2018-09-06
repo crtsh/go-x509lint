@@ -7,8 +7,8 @@ all:
 	ln -s x509lint/checks.h
 	ln -s x509lint/messages.c
 	ln -s x509lint/messages.h
-	go build
+	go install
 
 clean:
 	rm -rf x509lint
-	rm asn1_time.c asn1_time.h checks.c checks.h messages.c messages.h
+	rm -f asn1_time.c asn1_time.h checks.c checks.h messages.c messages.h
