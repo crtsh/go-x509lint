@@ -37,7 +37,9 @@ func Init() {
 
 func Check(cert_der []byte, cert_type int) string {
 	C.check((*C.uchar)(unsafe.Pointer(&cert_der[0])), (C.ulong)(len(cert_der)), C.DER, (C.CertType)(cert_type))
-	return C.GoString(C.get_messages())
+	messages := C.get_messages()
+	defer C.free(unsafe.Pointer(messages))
+	return C.GoString(messages)
 }
 
 func Finish() {
