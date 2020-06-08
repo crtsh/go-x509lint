@@ -1,14 +1,16 @@
 all:
+	go build
+
+update:
 	rm -rf x509lint
 	git clone https://github.com/kroeckx/x509lint
-	ln -s x509lint/asn1_time.c
-	ln -s x509lint/asn1_time.h
-	ln -s x509lint/checks.c
-	ln -s x509lint/checks.h
-	ln -s x509lint/messages.c
-	ln -s x509lint/messages.h
-	go build
+	cp x509lint/asn1_time.c .
+	cp x509lint/asn1_time.h .
+	cp x509lint/checks.c .
+	cp x509lint/checks.h .
+	cp x509lint/messages.c .
+	cp x509lint/messages.h .
+	rm -rf x509lint
 
 clean:
 	rm -rf x509lint
-	rm -f asn1_time.c asn1_time.h checks.c checks.h messages.c messages.h
