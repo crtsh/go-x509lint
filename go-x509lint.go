@@ -23,7 +23,7 @@ import (
 )
 
 /*
-#cgo LDFLAGS: -lcrypto
+#cgo LDFLAGS: /usr/lib64/libcrypto.a -lz -ldl
 #include <stdlib.h>
 #include "messages.h"
 #include "checks.h"
