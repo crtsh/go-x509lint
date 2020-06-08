@@ -1,9 +1,5 @@
 all:
-	sed -i "s/asn1_time_to_tm/_x509lint_asn1_time_to_tm/g" *.c
-	sed -i "s/asn1_time_to_tm/_x509lint_asn1_time_to_tm/g" *.h
 	go build
-	sed -i "s/_x509lint_asn1_time_to_tm/asn1_time_to_tm/g" *.c
-	sed -i "s/_x509lint_asn1_time_to_tm/asn1_time_to_tm/g" *.h
 
 update:
 	rm -rf x509lint

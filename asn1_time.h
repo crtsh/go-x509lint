@@ -16,7 +16,7 @@
  *
  * Returns true on success and false on failure.
  */
-bool asn1_time_to_tm(ASN1_TIME *time, struct tm *tm);
+bool _x509lint_asn1_time_to_tm(ASN1_TIME *time, struct tm *tm);
 
 #endif
 

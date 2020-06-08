@@ -1270,11 +1270,11 @@ static void CheckTime(X509 *x509, struct tm *tm_before, struct tm *tm_after, Cer
 	ASN1_TIME *after = X509_get_notAfter(x509);
 	bool error = false;
 
-	if (!asn1_time_to_tm(before, tm_before))
+	if (!_x509lint_asn1_time_to_tm(before, tm_before))
 	{
 		error = true;
 	}
-	if (!asn1_time_to_tm(after, tm_after))
+	if (!_x509lint_asn1_time_to_tm(after, tm_after))
 	{
 		error = true;
 	}

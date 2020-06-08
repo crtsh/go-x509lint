@@ -122,7 +122,7 @@ static bool time_to_tm(ASN1_TIME *t, bool general, struct tm *tm)
 	return true;
 }
 
-bool asn1_time_to_tm(ASN1_TIME *time, struct tm *tm)
+bool _x509lint_asn1_time_to_tm(ASN1_TIME *time, struct tm *tm)
 {
 	bool general = false;
 
