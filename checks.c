@@ -99,7 +99,7 @@ static ASN1_OBJECT *obj_postOfficeBox;
 static ASN1_OBJECT *obj_anyEKU;
 static ASN1_OBJECT *obj_IntelAMTvProEKU;
 
-uint32_t errors[3];
+uint32_t errors[4];
 uint32_t warnings[1];
 uint32_t info[1];
 uint32_t cert_info[1];
@@ -117,6 +117,9 @@ uint32_t cert_info[1];
 #define CERT_INFO_OCSP_SIGN     10
 #define CERT_INFO_NO_EKU        11
 #define CERT_INFO_AMTVPRO_EKU   12
+#define CERT_INFO_KU_CRL_SIGN   13
+#define CERT_INFO_HAS_SAN       14
+#define CERT_INFO_KU_CERT_SIGN  15
 
 const int primes[] = {
 	2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37, 41, 43, 47, 53, 59, 61, 67, 71, 73,
@@ -136,7 +139,7 @@ static void SetBit(uint32_t *val, int bit)
 	val[bit/(sizeof(uint32_t)*8)] |= (1 << (bit % (sizeof(int)*8)));
 }
 
-int GetBit(uint32_t *val, int bit)
+bool GetBit(uint32_t *val, int bit)
 {
 	return (val[bit/(sizeof(uint32_t)*8)] & (1 << (bit % (sizeof(uint32_t)*8)))) != 0;
 }
@@ -145,8 +148,9 @@ int GetBit(uint32_t *val, int bit)
 #define SetWarning(bit) SetBit(warnings, bit)
 #define SetInfo(bit) SetBit(info, bit)
 #define SetCertInfo(bit) SetBit(cert_info, bit)
+#define GetCertInfo(bit) GetBit(cert_info, bit)
 
-static X509 *LoadCert(unsigned char *data, size_t len, CertFormat format)
+X509 *GetCert(unsigned char *data, size_t len, CertFormat format)
 {
 	X509 *x509;
 	BIO *bio = BIO_new_mem_buf(data, len);
@@ -226,6 +230,14 @@ static void CheckValidURL(const unsigned char *s, int n)
 		i++;
 	}
 	/* TODO: Check the rest of URL, like starting with "http://" */
+}
+
+static void CheckBitString(ASN1_BIT_STRING *s)
+{
+	if (s->length > 0 && s->data[s->length-1] == 0)
+	{
+		SetError(ERR_BIT_STRING_LEADING_0);
+	}
 }
 
 /*
@@ -1022,6 +1034,14 @@ static void CheckSAN(X509 *x509, CertType type)
 			/* Not found */
 			break;
 		}
+		if (X509_NAME_entry_count(subject) == 0 && critical == 0)
+		{
+			SetError(ERR_SAN_NOT_CRITICAL);
+		}
+		if (sk_GENERAL_NAME_num(names) == 0)
+		{
+			SetError(ERR_SAN_EMPTY);
+		}
 		for (int i = 0; i < sk_GENERAL_NAME_num(names); i++)
 		{
 			GENERAL_NAME *name = sk_GENERAL_NAME_value(names, i);
@@ -1029,7 +1049,7 @@ static void CheckSAN(X509 *x509, CertType type)
 			ASN1_STRING *name_s = GENERAL_NAME_get0_value(name, &type);
 			if (type > GEN_RID || type < 0)
 			{
-				SetError(ERR_INVALID);
+				SetError(ERR_INVALID_GENERAL_NAME_TYPE);
 			}
 			else if (name_type_allowed[type] == SAN_TYPE_NOT_ALLOWED)
 			{
@@ -1123,6 +1143,10 @@ static void CheckSAN(X509 *x509, CertType type)
 	{
 		SetError(ERR_SAN_WITHOUT_NAME);
 	}
+	if (bSanFound)
+	{
+		SetCertInfo(CERT_INFO_HAS_SAN);
+	}
 	if (commonName != NULL && bSanFound && !bCommonNameFound)
 	{
 //		SetError(ERR_CN_NOT_IN_SAN);
@@ -1151,16 +1175,38 @@ static void CheckCRL(X509 *x509)
 			break;
 		}
 
+		bool bHaveAllReasons = false;
 		for (int i = 0; i < sk_DIST_POINT_num(crls); i++)
 		{
 			DIST_POINT *dp = sk_DIST_POINT_value(crls, i);
 			if (dp->distpoint == NULL && dp->CRLissuer == NULL)
 			{
-				SetError(ERR_INVALID_CRL_DIST_POINT);
+				SetError(ERR_CRL_DIST_POINT_WITHOUT_DISTPOINT_OR_ISSUER);
+			}
+			if (dp->CRLissuer != NULL)
+			{
+				if (sk_GENERAL_NAME_num(dp->CRLissuer) == 0)
+				{
+					SetError(ERR_CRL_ISSUER_EMPTY);
+				}
+				for (int j = 0; j < sk_GENERAL_NAME_num(dp->CRLissuer); j++)
+				{
+					GENERAL_NAME *gen = sk_GENERAL_NAME_value(dp->CRLissuer, j);
+					int type;
+					GENERAL_NAME_get0_value(gen, &type);
+					if (type != GEN_DIRNAME)
+					{
+						SetError(ERR_CRL_ISSUER_NOT_DIRNAME);
+					}
+				}
 			}
 			if (dp->distpoint != NULL && dp->distpoint->type == 0)
 			{
 				/* full name */
+				if (sk_GENERAL_NAME_num(dp->distpoint->name.fullname) == 0)
+				{
+					SetError(ERR_CRL_DISTPOINT_EMPTY);
+				}
 				for (int j = 0; j < sk_GENERAL_NAME_num(dp->distpoint->name.fullname); j++)
 				{
 					GENERAL_NAME *gen = sk_GENERAL_NAME_value(dp->distpoint->name.fullname, j);
@@ -1181,7 +1227,45 @@ static void CheckCRL(X509 *x509)
 			{
 				/* relative name */
 				SetWarning(WARN_CRL_RELATIVE);
+				if (dp->CRLissuer != NULL && sk_GENERAL_NAME_num(dp->CRLissuer) != 1)
+				{
+					SetError(ERR_RELATIVE_CRL_ISSUER_COUNT);
+				}
 			}
+			if (dp->reasons == NULL)
+			{
+				bHaveAllReasons = true;
+			}
+			else
+			{
+				int reason = 0;
+
+				CheckBitString(dp->reasons);
+				if (dp->reasons->length > 0)
+				{
+					reason = dp->reasons->data[0];
+				}
+				if (dp->reasons->length > 1)
+				{
+					reason |= (dp->reasons->data[1] << 8);
+				}
+				if (dp->reasons->length > 2)
+				{
+					SetError(ERR_INVALID_CRL_REASON);
+				}
+				if ((reason & CRLDP_ALL_REASONS) != reason)
+				{
+					SetError(ERR_INVALID_CRL_REASON);
+				}
+				if (reason == CRLDP_ALL_REASONS)
+				{
+					bHaveAllReasons = true;
+				}
+			}
+		}
+		if (!bHaveAllReasons)
+		{
+			SetError(ERR_NOT_ALL_CRL_REASONS);
 		}
 		sk_DIST_POINT_pop_free(crls, DIST_POINT_free);
 	}
@@ -1212,7 +1296,7 @@ static void CheckAIA(X509 *x509, CertType type)
 			/* Not found */
 			break;
 		}
-		if (critical)
+		if (critical != 0)
 		{
 			SetError(ERR_AIA_CRITICAL);
 		}
@@ -1344,6 +1428,82 @@ static void CheckDuplicateExtensions(X509 *x509)
 	sk_ASN1_OBJECT_free(stack);
 }
 
+static void CheckKU(X509 *x509, CertType type)
+{
+	int critical = -1;
+
+	ASN1_BIT_STRING *usage = X509_get_ext_d2i(x509, NID_key_usage, &critical, NULL);
+	if (usage == NULL)
+	{
+		if (critical >= 0)
+		{
+			/* Found but fails to parse */
+			SetError(ERR_INVALID);
+			return;
+		}
+		if (type != SubscriberCertificate)
+		{
+			SetError(ERR_NO_KEY_USAGE);
+		}
+		return;
+	}
+	if (critical == 0)
+	{
+		if (type != SubscriberCertificate)
+		{
+			/* The BRs make this required */
+			SetError(ERR_KEY_USAGE_NOT_CRITICAL);
+		}
+		else
+		{
+			SetWarning(WARN_KEY_USAGE_NOT_CRITICAL);
+		}
+	}
+	if (usage->length == 0)
+	{
+		SetError(ERR_KEY_USAGE_EMPTY);
+	}
+	CheckBitString(usage);
+	int bits = 0;
+	if (usage->length > 0)
+	{
+		bits = usage->data[0];
+	}
+	if (usage->length > 1)
+	{
+		bits |= (usage->data[1] << 8);
+	}
+	if ((bits & 0x80FF) != bits)
+	{
+		SetError(ERR_KEY_USAGE_UNKNOWN_BIT);
+	}
+	if (usage->length > 2)
+	{
+		SetError(ERR_KEY_USAGE_TOO_LONG);
+	}
+	if (bits == 0)
+	{
+		SetError(ERR_KEY_USAGE_EMPTY);
+	}
+	if (type == SubscriberCertificate && (bits & KU_KEY_CERT_SIGN) != 0)
+	{
+		SetError(ERR_KEY_USAGE_HAS_CERT_SIGN);
+	}
+	if (type != SubscriberCertificate && (bits & (KU_KEY_CERT_SIGN|KU_CRL_SIGN)) == 0)
+	{
+		SetWarning(WARN_KEY_USAGE_NO_CERT_OR_CRL_SIGN);
+	}
+	if ((bits & KU_CRL_SIGN) != 0)
+	{
+		SetCertInfo(CERT_INFO_KU_CRL_SIGN);
+	}
+	if ((bits & KU_KEY_CERT_SIGN) != 0)
+	{
+		SetCertInfo(CERT_INFO_KU_CERT_SIGN);
+	}
+	ASN1_BIT_STRING_free(usage);
+}
+
 static void CheckEKU(X509 *x509, CertType type)
 {
 	int idx = -1;
@@ -1434,6 +1594,56 @@ static void CheckEKU(X509 *x509, CertType type)
 		sk_ASN1_OBJECT_pop_free(ekus, ASN1_OBJECT_free);
 	}
 	while (1);
+}
+
+static void CheckBasicConstraints(X509 *x509, CertType type)
+{
+	int critical = -1;
+
+	BASIC_CONSTRAINTS *bc = X509_get_ext_d2i(x509, NID_basic_constraints, &critical, NULL);
+
+	if (bc == NULL)
+	{
+		if (critical >= 0)
+		{
+			/* Found but fails to parse */
+			SetError(ERR_INVALID);
+			return;
+		}
+		if (type != SubscriberCertificate)
+		{
+			SetError(ERR_NO_BASIC_CONSTRAINTS);
+		}
+		return;
+	}
+	if (type != SubscriberCertificate)
+	{
+		if (critical == 0)
+		{
+			SetError(ERR_BASIC_CONSTRAINTS_NOT_CRITICAL);
+		}
+		if (bc->ca == 0)
+		{
+			/* X509_check_ca() supports various old methods to detect a CA. */
+			SetError(ERR_CA_CERT_NOT_CA);
+		}
+	}
+	if (bc->pathlen != NULL)
+	{
+		if (bc->pathlen->type == V_ASN1_NEG_INTEGER)
+		{
+			SetError(ERR_BASIC_CONSTRAINTS_NEG_PATHLEN);
+		}
+		if (bc->ca == 0)
+		{
+			SetError(ERR_BASIC_CONSTRAINTS_NO_CA_PATHLEN);
+		}
+		if (!GetCertInfo(CERT_INFO_KU_CERT_SIGN))
+		{
+			SetError(ERR_BASIC_CONSTRAINTS_NO_CERT_SIGN_PATHLEN);
+		}
+	}
+	BASIC_CONSTRAINTS_free(bc);
 }
 
 static void CheckASN1_integer(ASN1_INTEGER *integer)
@@ -1567,12 +1777,34 @@ static void CheckPublicKey(X509 *x509, struct tm tm_after)
 		{
 			SetError(ERR_EC_NON_ALLOWED_CURVE);
 		}
+
+		X509_PUBKEY *pubkey = X509_get_X509_PUBKEY(x509);
+		const unsigned char *k;
+		int pklen;
+		X509_ALGOR *a;
+		X509_PUBKEY_get0_param(NULL, &k, &pklen, &a, pubkey);
+
+		int pkey_nid = OBJ_obj2nid(a->algorithm);
+		if (pkey_nid != NID_X9_62_id_ecPublicKey)
+		{
+			/* How did we get here? */
+			SetError(ERR_INVALID);
+		}
+		if (a->parameter == NULL)
+		{
+			SetError(ERR_EC_NO_PARAMETER);
+		}
+		if (a->parameter != NULL && a->parameter->type != V_ASN1_OBJECT)
+		{
+			SetError(ERR_NOT_NAMED_CURVE);
+		}
+
 		EC_POINT_free(result);
 		BN_free(order);
 		BN_CTX_free(ctx);
 		EC_KEY_free(ec_key);
 	}
-	else
+	else if (EVP_PKEY_id(pkey) != EVP_PKEY_ED25519 && EVP_PKEY_id(pkey) != EVP_PKEY_ED448)
 	{
 		SetError(ERR_UNKNOWN_PUBLIC_KEY_TYPE);
 	}
@@ -1583,33 +1815,150 @@ static void CheckPublicKey(X509 *x509, struct tm tm_after)
 	}
 }
 
+static void CheckSKID(X509 *x509, CertType type)
+{
+	int critical = -1;
+
+	ASN1_OCTET_STRING *skid = X509_get_ext_d2i(x509, NID_subject_key_identifier, &critical, NULL);
+	if (skid == NULL && critical >= 0)
+	{
+		SetError(ERR_INVALID);
+	}
+	if (skid == NULL && type != SubscriberCertificate)
+	{
+		SetError(ERR_SKID_MISSING);
+	}
+	if (skid != NULL && critical > 0)
+	{
+		SetError(ERR_SKID_CRITICAL);
+	}
+	ASN1_OCTET_STRING_free(skid);
+}
+
+CertType GetType(X509 *x509)
+{
+	int ca = X509_check_ca(x509);
+
+	int critical = -1;
+	AUTHORITY_KEYID *akid = X509_get_ext_d2i(x509, NID_authority_key_identifier, &critical, NULL);
+	if (akid == NULL && critical >= 0)
+	{
+		SetError(ERR_INVALID);
+	}
+
+	bool self_issued = X509_check_issued(x509, x509) == X509_V_OK;
+	bool self_signed = self_issued && (akid == NULL || X509_check_akid(x509, akid) == X509_V_OK);
+
+	if (!self_signed && akid == NULL)
+	{
+		SetError(ERR_AKID_MISSING);
+	}
+	if (akid != NULL && critical > 0)
+	{
+		SetError(ERR_AKID_CRITICAL);
+	}
+	if (akid != NULL && akid->keyid == NULL)
+	{
+		SetError(ERR_AKID_WITHOUT_KEY_ID);
+	}
+
+	AUTHORITY_KEYID_free(akid);
+
+	if (!ca)
+	{
+		return SubscriberCertificate;
+	}
+	else if (!self_signed)
+	{
+		return IntermediateCA;
+	}
+	else
+	{
+		return RootCA;
+	}
+}
+
+static void CheckSigAlg(X509 *x509)
+{
+	const X509_ALGOR *sig_alg, *tbs_sig_alg;
+	X509_get0_signature(NULL, &sig_alg, x509);
+	tbs_sig_alg = X509_get0_tbs_sigalg(x509);
+	if (X509_ALGOR_cmp(sig_alg, tbs_sig_alg) != 0)
+	{
+		SetError(ERR_SIG_ALG_MISMATCH);
+	}
+	int sig_nid = OBJ_obj2nid(sig_alg->algorithm);
+	if (sig_nid == NID_undef)
+	{
+		SetError(ERR_UNKNOWN_SIGNATURE_ALGORITHM);
+		return;
+	}
+	int pkey_nid;
+	if (OBJ_find_sigid_algs(sig_nid, NULL, &pkey_nid) == 0)
+	{
+		SetError(ERR_UNKNOWN_SIGNATURE_ALGORITHM);
+		return;
+	}
+	if (pkey_nid == NID_dsa || pkey_nid == NID_dsa_2 || pkey_nid == NID_ED25519
+	   || pkey_nid == NID_ED448 || pkey_nid == NID_X9_62_id_ecPublicKey
+	   || pkey_nid == NID_id_GostR3411_94 || pkey_nid == NID_id_GostR3410_2001)
+	{
+		if (sig_alg->parameter != NULL || tbs_sig_alg->parameter != NULL)
+		{
+			SetError(ERR_SIG_ALG_PARAMETER_PRESENT);
+		}
+	}
+	else if (pkey_nid == NID_rsaEncryption)
+	{
+		if (sig_alg->parameter == NULL || tbs_sig_alg->parameter == NULL)
+		{
+			SetError(ERR_SIG_ALG_PARAMETER_MISSING);
+		}
+		else if((sig_alg->parameter->type != V_ASN1_NULL || tbs_sig_alg->parameter->type != V_ASN1_NULL))
+		{
+			SetError(ERR_SIG_ALG_PARAMETER_NOT_NULL);
+		}
+	}
+	else
+	{
+		SetError(ERR_UNKNOWN_SIGNATURE_ALGORITHM);
+	}
+}
+
 void check(unsigned char *cert_buffer, size_t cert_len, CertFormat format, CertType type)
 {
 	X509_NAME *issuer;
 	X509_NAME *subject;
 	int ret;
 	X509 *x509;
-	int ca;
 	struct tm tm_before;
 	struct tm tm_after;
 
 	Clear();
 
-	x509 = LoadCert(cert_buffer, cert_len, format);
+	x509 = GetCert(cert_buffer, cert_len, format);
 	if (x509 == NULL)
 	{
 		SetError(ERR_INVALID);
 		return;
 	}
 
-	ca = X509_check_ca(x509);
-	if (ca > 0 && type == SubscriberCertificate)
+	if (type != GetType(x509))
 	{
-		SetWarning(WARN_CHECKED_AS_SUBSCRIBER);
+		SetWarning(WARN_CALLED_WITH_WRONG_TYPE);
 	}
-	else if (ca == 0 && type != SubscriberCertificate)
+
+	if (type == SubscriberCertificate)
 	{
-		SetWarning(WARN_CHECKED_AS_CA);
+		SetInfo(INF_CHECKING_LEAF);
+	}
+	else if (type == IntermediateCA)
+	{
+		SetInfo(INF_CHECKING_INTERMEDIATE_CA);
+	}
+	else if (type == RootCA)
+	{
+		SetInfo(INF_CHECKING_ROOT_CA);
 	}
 
 	ret = X509_get_version(x509);
@@ -1626,6 +1975,10 @@ void check(unsigned char *cert_buffer, size_t cert_len, CertFormat format, CertT
 		return;
 	}
 	CheckDN(issuer);
+	if (X509_NAME_entry_count(issuer) == 0)
+	{
+		SetError(ERR_EMPTY_ISSUER);
+	}
 
 	CheckSerial(x509);
 	CheckTime(x509, &tm_before, &tm_after, type);
@@ -1699,9 +2052,12 @@ void check(unsigned char *cert_buffer, size_t cert_len, CertFormat format, CertT
 		SetError(ERR_SUBJECT_COUNTRY);
 	}
 
+	CheckKU(x509, type);
 	CheckEKU(x509, type);
 	CheckPolicy(x509, type, subject);
 	CheckSAN(x509, type);
+	CheckBasicConstraints(x509, type);
+	CheckSKID(x509, type);
 
 	/* Deprecated in CAB base 7.1.4.2.2a */
 	if (IsNameObjPresent(subject, obj_commonName))
@@ -1719,6 +2075,16 @@ void check(unsigned char *cert_buffer, size_t cert_len, CertFormat format, CertT
 	CheckCRL(x509);
 	CheckAIA(x509, type);
 	CheckPublicKey(x509, tm_after);
+
+	if ((type != SubscriberCertificate
+		|| GetCertInfo(CERT_INFO_KU_CRL_SIGN)
+		|| !GetCertInfo(CERT_INFO_HAS_SAN)
+		) && X509_NAME_entry_count(subject) == 0)
+	{
+		SetError(ERR_EMPTY_SUBJECT);
+	}
+
+	CheckSigAlg(x509);
 
 	X509_free(x509);
 }

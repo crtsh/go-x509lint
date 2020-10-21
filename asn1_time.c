@@ -47,7 +47,7 @@ static bool time_to_tm(ASN1_TIME *t, bool general, struct tm *tm)
 		tm->tm_year = (s[0] - '0') * 1000 + (s[1] - '0') * 100 + (s[2] - '0') * 10 + s[3] - '0' - 1900;
 		i += 4;
 
-		if (tm->tm_year < 150 || tm->tm_year >= 50)
+		if (tm->tm_year < 150 && tm->tm_year >= 50)
 		{
 			return false;
 		}

@@ -47,7 +47,7 @@ static const char *error_strings[] =
 	"E: countryName not 2 characters long\n", /* ERR_COUNTRY_SIZE */
 	"E: Invalid time format\n", /* ERR_INVALID_TIME_FORMAT */
 	"E: Duplicate extension\n", /* ERR_DUPLICATE_EXTENSION */
-	"E: Invalid CRL distribution point\n", /* ERR_INVALID_CRL_DIST_POINT */
+	"E: CRL DistributionPoint without distributionPoint or cRLIssuer\n", /* ERR_CRL_DIST_POINT_WITHOUT_DISTPOINT_OR_ISSUER */
 	"E: Invalid display text type\n", /* ERR_INVALID_DISPLAY_TEXT_TYPE */
 	"E: Invalid display text length\n", /* ERR_INVALID_DISPLAY_TEXT_LENGTH */
 	"E: Invalid user notice type\n", /* ERR_INVALID_TYPE_USER_NOTICE */
@@ -112,13 +112,48 @@ static const char *error_strings[] =
 	"E: Teletex string with an escape sequence\n", /* ERR_TELETEX_WITH_ESCAPE */
 	"E: Baseline Requirements policy present for non server authentication certificate\n", /* ERR_POLICY_BR */
 	"E: RSA modulus is negative\n", /* ERR_RSA_MODULUS_NEGATIVE */
+	"E: No key usage\n", /* ERR_NO_KEY_USAGE */
+	"E: Key usage is empty\n", /* ERR_KEY_USAGE_EMPTY */
+	"E: Key usage is too long\n", /* ERR_KEY_USAGE_TOO_LONG */
+	"E: Key usage has keyCertSign\n", /* ERR_KEY_USAGE_HAS_CERT_SIGN */
+	"E: AKID missing\n", /* ERR_AKID_MISSING */
+	"E: No CRL distpoint with all reasons\n", /* ERR_NOT_ALL_CRL_REASONS */
+	"E: CRL DistributionPoint's cRLIssuer empty\n", /* ERR_CRL_ISSUER_EMPTY */
+	"E: CRL DistributionPoint's cRLIssuer not a directoryName\n", /* ERR_CRL_ISSUER_NOT_DIRNAME */
+	"E: CRL DistributionPoint's distributionPoint empty\n", /* ERR_CRL_DISTPOINT_EMPTY */
+	"E: CRL DistributionPoint's cRLIssuer is relative, but has more than 1 entry\n", /* ERR_RELATIVE_CRL_ISSUER_COUNT */
+	"E: Invalid CRL reason\n", /* ERR_INVALID_CRL_REASON */
+	"E: CA certificate without Basic Constraints\n", /* ERR_NO_BASIC_CONSTRAINTS */
+	"E: CA certificate with non-critical Basic Constraints\n", /* ERR_BASIC_CONSTRAINTS_NOT_CRITICAL */
+	"E: CA certificate with CA:false\n", /* ERR_CA_CERT_NOT_CA */
+	"E: Basic Constraints with negative length\n", /* ERR_BASIC_CONSTRAINTS_NEG_PATHLEN */
+	"E: Basic Constraints with pathlen for non-CA\n", /* ERR_BASIC_CONSTRAINTS_NO_CA_PATHLEN */
+	"E: Empty issuer\n", /* ERR_EMPTY_ISSUER */
+	"E: Empty subject\n", /* ERR_EMPTY_SUBJECT */
+	"E: SAN is not critical\n", /* ERR_SAN_NOT_CRITICAL */
+	"E: Key usage not critical\n", /* ERR_KEY_USAGE_NOT_CRITICAL */
+	"E: Empty SAN\n", /* ERR_SAN_EMPTY */
+	"E: Signature algorithm mismatch\n", /* ERR_SIG_ALG_MISMATCH */
+	"E: AKID is critical\n", /* ERR_AKID_CRITICAL */
+	"E: SKID missing\n", /* ERR_SKID_MISSING */
+	"E: SKID critical\n", /* ERR_SKID_CRITICAL */
+	"E: Signature algorithm parameter missing\n", /* ERR_SIG_ALG_PARAMETER_MISSING */
+	"E: Bit string with leading 0\n", /* ERR_BIT_STRING_LEADING_0 */
+	"E: Signature algorithm parameter not NULL\n", /* ERR_SIG_ALG_PARAMETER_NOT_NULL */
+	"E: Unkonwn signature algorithm\n", /* ERR_UNKNOWN_SIGNATURE_ALGORITHM */
+	"E: Signature algorithm parameter present\n", /* ERR_SIG_ALG_PARAMETER_PRESENT */
+	"E: Not using a named curve\n", /* ERR_NOT_NAMED_CURVE */
+	"E: Key usage with unknown bit\n", /* ERR_KEY_USAGE_UNKNOWN_BIT */
+	"E: Basic Constraints with pathlen but key usage without cert sign\n", /* ERR_BASIC_CONSTRAINTS_NO_CERT_SIGN_PATHLEN */
+	"E: AKID without a key identifier\n", /* ERR_AKID_WITHOUT_KEY_ID */
+	"E: Invalid general name type\n", /* ERR_INVALID_GENERAL_NAME_TYPE */
+	"E: EC key without parameters\n", /* ERR_EC_NO_PARAMETER */
 };
 
 static const char *warning_strings[] = {
 	"W: The name entry contains something that is not a PrintableString or UTF8String\n", /* WARN_NON_PRINTABLE_STRING */
 	"W: The certificate is valid for longer than 39 months\n", /* WARN_LONGER_39_MONTHS */
-	"W: CA certificate checked as if it was a subscriber certificate\n", /* WARN_CHECKED_AS_SUBSCRIBER */
-	"W: Subscriber certificate checked as if it was a CA certificate\n", /* WARN_CHECKED_AS_CA */
+	"W: Called with wrong certificate type\n", /* WARN_CALLED_WITH_WRONG_TYPE */
 	"W: CRL distribution point uses relative name\n", /* WARN_CRL_RELATIVE */
 	"W: No HTTP URL for issuing certificate\n", /* WARN_NO_ISSUING_CERT_HTTP */
 	"W: Duplicate SAN entry\n", /* WARN_DUPLICATE_SAN */
@@ -130,6 +165,8 @@ static const char *warning_strings[] = {
 	"W: Subscriber certificate without Extended Key Usage\n", /* WARN_NO_EKU */
 	"W: No commonName\n", /* WARN_NO_CN */
 	"W: TLS client with DNS or IP address\n", /* WARN_TLS_CLIENT_DNS */
+	"W: Key usage not critical\n", /* WARN_KEY_USAGE_NOT_CRITICAL */
+	"W: Key usage doesn't have keyCertSign or cRLSign\n", /* WARN_KEY_USAGE_NO_CERT_OR_CRL_SIGN */
 };
 
 static const char *info_strings[] = {
@@ -138,6 +175,9 @@ static const char *info_strings[] = {
 	"I: CRL is not a URL\n", /* INF_CRL_NOT_URL */
 	"I: Unknown validation policy\n", /* INF_UNKNOWN_VALIDATION */
 	"I: Name entry length not checked\n", /* INF_NAME_ENTRY_LENGTH_NOT_CHECKED */
+	"I: Checking as leaf certificate\n", /* #define INF_CHECKING_LEAF */
+	"I: Checking as intermediate CA certificate\n", /* #define INF_CHECKING_INTERMEDIATE_CA */
+	"I: Checking as root CA certificate\n", /* #define INF_CHECKING_ROOT_CA */
 };
 
 /* 

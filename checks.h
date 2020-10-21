@@ -2,6 +2,7 @@
 #define _CHECKS_H_
 
 #include <stdint.h>
+#include <stdbool.h>
 
 typedef enum { SubscriberCertificate, IntermediateCA, RootCA } CertType;
 typedef enum { PEM, DER } CertFormat;
@@ -28,7 +29,7 @@ typedef enum { PEM, DER } CertFormat;
 #define ERR_COUNTRY_SIZE                      18
 #define ERR_INVALID_TIME_FORMAT               19
 #define ERR_DUPLICATE_EXTENSION               20
-#define ERR_INVALID_CRL_DIST_POINT            21
+#define ERR_CRL_DIST_POINT_WITHOUT_DISTPOINT_OR_ISSUER 21
 #define ERR_INVALID_DISPLAY_TEXT_TYPE         22
 #define ERR_INVALID_DISPLAY_TEXT_LENGTH       23
 #define ERR_INVALID_TYPE_USER_NOTICE          24
@@ -93,25 +94,62 @@ typedef enum { PEM, DER } CertFormat;
 #define ERR_TELETEX_WITH_ESCAPE               83
 #define ERR_POLICY_BR                         84
 #define ERR_RSA_MODULUS_NEGATIVE              85
-#define MAX_ERR                               ERR_RSA_MODULUS_NEGATIVE
+#define ERR_NO_KEY_USAGE                      86
+#define ERR_KEY_USAGE_EMPTY                   87
+#define ERR_KEY_USAGE_TOO_LONG                88
+#define ERR_KEY_USAGE_HAS_CERT_SIGN           89
+#define ERR_AKID_MISSING                      90
+#define ERR_NOT_ALL_CRL_REASONS               91
+#define ERR_CRL_ISSUER_EMPTY                  92
+#define ERR_CRL_ISSUER_NOT_DIRNAME            93
+#define ERR_CRL_DISTPOINT_EMPTY               94
+#define ERR_RELATIVE_CRL_ISSUER_COUNT         95
+#define ERR_INVALID_CRL_REASON                96
+#define ERR_NO_BASIC_CONSTRAINTS              97
+#define ERR_BASIC_CONSTRAINTS_NOT_CRITICAL    98
+#define ERR_CA_CERT_NOT_CA                    99
+#define ERR_BASIC_CONSTRAINTS_NEG_PATHLEN    100
+#define ERR_BASIC_CONSTRAINTS_NO_CA_PATHLEN  101
+#define ERR_EMPTY_ISSUER                     102
+#define ERR_EMPTY_SUBJECT                    103
+#define ERR_SAN_NOT_CRITICAL                 104
+#define ERR_KEY_USAGE_NOT_CRITICAL           105
+#define ERR_SAN_EMPTY                        106
+#define ERR_SIG_ALG_MISMATCH                 107
+#define ERR_AKID_CRITICAL                    108
+#define ERR_SKID_MISSING                     109
+#define ERR_SKID_CRITICAL                    110
+#define ERR_SIG_ALG_PARAMETER_MISSING        111
+#define ERR_BIT_STRING_LEADING_0             112
+#define ERR_SIG_ALG_PARAMETER_NOT_NULL       113
+#define ERR_UNKNOWN_SIGNATURE_ALGORITHM      114
+#define ERR_SIG_ALG_PARAMETER_PRESENT        115
+#define ERR_NOT_NAMED_CURVE                  116
+#define ERR_KEY_USAGE_UNKNOWN_BIT            117
+#define ERR_BASIC_CONSTRAINTS_NO_CERT_SIGN_PATHLEN 118
+#define ERR_AKID_WITHOUT_KEY_ID              119
+#define ERR_INVALID_GENERAL_NAME_TYPE        120
+#define ERR_EC_NO_PARAMETER                  121
+#define MAX_ERR                              ERR_EC_NO_PARAMETER
 
 /* This violates a SHOULD (or MUST with exception that can't be checked) */
 #define WARN_NON_PRINTABLE_STRING      0
 #define WARN_LONGER_39_MONTHS          1
-#define WARN_CHECKED_AS_SUBSCRIBER     2
-#define WARN_CHECKED_AS_CA             3
-#define WARN_CRL_RELATIVE              4
-#define WARN_NO_ISSUING_CERT_HTTP      5
-#define WARN_DUPLICATE_SAN             6
-#define WARN_EV_LONGER_12_MONTHS       7
-#define WARN_UNKNOWN_EKU               8
-#define WARN_RSA_EXP_RANGE             9
-#define WARN_POLICY_QUALIFIER_NOT_CPS 10
-#define WARN_EXPLICIT_TEXT_ENCODING   11
-#define WARN_NO_EKU                   12
-#define WARN_NO_CN                    13
-#define WARN_TLS_CLIENT_DNS           14
-#define MAX_WARN                      WARN_TLS_CLIENT_DNS
+#define WARN_CALLED_WITH_WRONG_TYPE    2
+#define WARN_CRL_RELATIVE              3
+#define WARN_NO_ISSUING_CERT_HTTP      4
+#define WARN_DUPLICATE_SAN             5
+#define WARN_EV_LONGER_12_MONTHS       6
+#define WARN_UNKNOWN_EKU               7
+#define WARN_RSA_EXP_RANGE             8
+#define WARN_POLICY_QUALIFIER_NOT_CPS  9
+#define WARN_EXPLICIT_TEXT_ENCODING   10
+#define WARN_NO_EKU                   11
+#define WARN_NO_CN                    12
+#define WARN_TLS_CLIENT_DNS           13
+#define WARN_KEY_USAGE_NOT_CRITICAL   14
+#define WARN_KEY_USAGE_NO_CERT_OR_CRL_SIGN 15
+#define MAX_WARN                      WARN_KEY_USAGE_NO_CERT_OR_CRL_SIGN
 
 /* Certificate is valid, but contains things like deprecated or not checked. */
 #define INF_SUBJECT_CN                    0
@@ -119,15 +157,23 @@ typedef enum { PEM, DER } CertFormat;
 #define INF_CRL_NOT_URL                   2
 #define INF_UNKNOWN_VALIDATION            3        /* Software doesn't know OID yet. */
 #define INF_NAME_ENTRY_LENGTH_NOT_CHECKED 4        /* Software doesn't know how to check size yet. */
-#define MAX_INF                           INF_NAME_ENTRY_LENGTH_NOT_CHECKED
+#define INF_CHECKING_LEAF                 5
+#define INF_CHECKING_INTERMEDIATE_CA      6
+#define INF_CHECKING_ROOT_CA              7
+#define MAX_INF                           INF_CHECKING_ROOT_CA
 
 extern uint32_t errors[];
 extern uint32_t warnings[];
 extern uint32_t info[];
 
+struct x509_st;
+typedef struct x509_st X509;
+
 void check_init();
+X509 *GetCert(unsigned char *data, size_t len, CertFormat format);
+CertType GetType(X509 *x509);
 void check(unsigned char *cert_buffer, size_t cert_len, CertFormat format, CertType type);
-int GetBit(uint32_t *val, int bit);
+bool GetBit(uint32_t *val, int bit);
 void check_finish();
 
 
