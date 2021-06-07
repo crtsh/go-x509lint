@@ -119,18 +119,26 @@ typedef enum { PEM, DER } CertFormat;
 #define ERR_AKID_CRITICAL                    108
 #define ERR_SKID_MISSING                     109
 #define ERR_SKID_CRITICAL                    110
-#define ERR_SIG_ALG_PARAMETER_MISSING        111
+#define ERR_ALG_PARAMETER_MISSING            111
 #define ERR_BIT_STRING_LEADING_0             112
-#define ERR_SIG_ALG_PARAMETER_NOT_NULL       113
+#define ERR_ALG_PARAMETER_NOT_NULL           113
 #define ERR_UNKNOWN_SIGNATURE_ALGORITHM      114
-#define ERR_SIG_ALG_PARAMETER_PRESENT        115
+#define ERR_ALG_PARAMETER_PRESENT            115
 #define ERR_NOT_NAMED_CURVE                  116
 #define ERR_KEY_USAGE_UNKNOWN_BIT            117
 #define ERR_BASIC_CONSTRAINTS_NO_CERT_SIGN_PATHLEN 118
 #define ERR_AKID_WITHOUT_KEY_ID              119
 #define ERR_INVALID_GENERAL_NAME_TYPE        120
 #define ERR_EC_NO_PARAMETER                  121
-#define MAX_ERR                              ERR_EC_NO_PARAMETER
+#define ERR_ALG_WRONG_TYPE                   122
+#define ERR_ALG_FAILED_DECODING              123
+#define ERR_DEFAULT_VALUE                    124
+#define ERR_NOT_ALLOWED_HASH                 125
+#define ERR_NOT_ALLOWED_MASK_ALGORITHM       126
+#define ERR_PSS_HASH_NOT_EQUAL               127
+#define ERR_PSS_INVALID_SALT_LENGTH          128
+#define ERR_PSS_INVALID_TRAILER              129
+#define MAX_ERR                              ERR_PSS_INVALID_TRAILER
 
 /* This violates a SHOULD (or MUST with exception that can't be checked) */
 #define WARN_NON_PRINTABLE_STRING      0
@@ -170,9 +178,9 @@ struct x509_st;
 typedef struct x509_st X509;
 
 void check_init();
-X509 *GetCert(unsigned char *data, size_t len, CertFormat format);
+X509 *GetCert(const unsigned char *data, size_t len, CertFormat format);
 CertType GetType(X509 *x509);
-void check(unsigned char *cert_buffer, size_t cert_len, CertFormat format, CertType type);
+void check(const unsigned char *cert_buffer, size_t cert_len, CertFormat format, CertType type);
 bool GetBit(uint32_t *val, int bit);
 void check_finish();
 
