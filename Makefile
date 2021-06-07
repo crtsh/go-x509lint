@@ -10,6 +10,7 @@ update:
 	cp x509lint/checks.h .
 	cp x509lint/messages.c .
 	cp x509lint/messages.h .
+	patch < ./asn1_time_to_tm.patch
 	rm -rf x509lint
 
 clean:
